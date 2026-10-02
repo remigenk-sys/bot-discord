@@ -178,7 +178,7 @@ async def on_member_join(member):
         background = Editor(bg_image).resize((800, 450))
         
         # PERBAIKAN: .circleify() dipanggil sebelum .resize() agar tidak throw AttributeError
-        avatar = Editor(avatar_image).circleify().resize((160, 160))
+        avatar = Editor(avatar_image).resize((160, 160)).circle_image()
 
         # Tempelkan Avatar ke Background
         background.paste(avatar, (60, 145))
