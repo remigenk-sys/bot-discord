@@ -1,14 +1,15 @@
 import discord
-import json
 import os
 import asyncio
 import io
+import math
 import aiohttp
 import yt_dlp
 import spotipy
 import psycopg2
 from spotipy.oauth2 import SpotifyClientCredentials
-from easy_pil import Editor, Canvas, Font, load_image_async
+from easy_pil import Font
+from PIL import Image, ImageSequence, ImageDraw
 
 # ===== INTENTS CONFIGURATION =====
 intents = discord.Intents.default()
@@ -19,7 +20,7 @@ client = discord.Client(intents=intents)
 
 # ===== SPOTIFY CREDENTIALS =====
 sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
-    client_id="YOUR_SPOTIFY_CLIENT_ID", 
+    client_id="YOUR_SPOTIFY_CLIENT_ID",
     client_secret="YOUR_SPOTIFY_CLIENT_SECRET"
 ))
 
@@ -76,6 +77,13 @@ init_db()
 LEVEL_UNLOCK = 5
 ROLE_NAME = "Level5"
 
+# ===== WELCOME CONFIG =====
+WELCOME_CHANNEL_ID = 1472551428798152875
+WELCOME_BG_URL = "https://media.giphy.com/media/HSCZMUa1ao17h7l5mg/giphy.gif"
+GIFT_XP = 100          # gift XP untuk member baru
+MAX_FRAMES = 40        # batasi frame supaya ukuran GIF tidak melebihi limit upload Discord
+CARD_SIZE = (800, 450)
+
 # ===== MUSIC SYSTEM =====
 music_queue = []
 is_playing = False
@@ -84,7 +92,7 @@ YTDL_OPTIONS = {
     'format': 'bestaudio/best',
     'noplaylist': True,
     'quiet': True,
-    'default_search': 'scsearch', 
+    'default_search': 'scsearch',
     'nocheckcertificate': True,
     'ext': 'mp3',
     'ignoreerrors': True,
@@ -153,6 +161,47 @@ async def play_next(voice_client):
     else:
         is_playing = False
 
+# ===== WELCOME GIF BUILDER =====
+def buat_welcome_gif(bg_bytes, avatar_bytes, nama, guild_name, jumlah):
+    # Avatar bulat
+    avatar = Image.open(io.BytesIO(avatar_bytes)).convert("RGBA").resize((160, 160))
+    mask = Image.new("L", (160, 160), 0)
+    ImageDraw.Draw(mask).ellipse((0, 0, 160, 160), fill=255)
+    avatar.putalpha(mask)
+
+    font_title = Font.poppins(variant="bold", size=35).font
+    font_sub = Font.poppins(variant="regular", size=25).font
+
+    bg = Image.open(io.BytesIO(bg_bytes))
+
+    # Kumpulkan semua frame + durasinya
+    raw = []
+    for frame in ImageSequence.Iterator(bg):
+        raw.append((frame.copy(), frame.info.get("duration", 50)))
+
+    # Kurangi jumlah frame kalau terlalu banyak (ambil tiap N frame, durasi digabung)
+    step = max(1, math.ceil(len(raw) / MAX_FRAMES))
+    frames, durations = [], []
+    for i in range(0, len(raw), step):
+        chunk = raw[i:i + step]
+        durations.append(sum(d for _, d in chunk))
+
+        f = chunk[0][0].convert("RGB").resize(CARD_SIZE)
+        f.paste(avatar, (60, 145), avatar)
+        draw = ImageDraw.Draw(f)
+        draw.text((250, 170), f"Welcome {nama}", fill="white", font=font_title)
+        draw.text((250, 220), f"to {guild_name}", fill="white", font=font_title)
+        draw.text((250, 270), f"Member #{jumlah}", fill="#a0a0a0", font=font_sub)
+        frames.append(f)
+
+    out = io.BytesIO()
+    frames[0].save(
+        out, format="GIF", save_all=True,
+        append_images=frames[1:], duration=durations, loop=0, disposal=2
+    )
+    out.seek(0)
+    return out
+
 # ===== EVENT HANDLERS =====
 
 @client.event
@@ -161,48 +210,51 @@ async def on_ready():
 
 @client.event
 async def on_member_join(member):
-    welcome_channel_id = 1472551428798152875 
-    channel = client.get_channel(welcome_channel_id)
+    channel = client.get_channel(WELCOME_CHANNEL_ID)
     if not channel:
         return
 
+    # 1) Welcome card GIF
     try:
-        # Load avatar member
-        avatar_image = await load_image_async(str(member.display_avatar.url))
-        
-        # Load Direct GIF Background
-        bg_url = "https://media.giphy.com/media/HSCZMUa1ao17h7l5mg/giphy.gif"
-        bg_image = await load_image_async(bg_url)
+        avatar_bytes = await member.display_avatar.replace(format="png", size=256).read()
 
-        # Buat Card Welcome
-        background = Editor(bg_image).resize((800, 450))
-        
-        # PERBAIKAN: .circleify() dipanggil sebelum .resize() agar tidak throw AttributeError
-        avatar = Editor(avatar_image).resize((160, 160)).circle_image()
+        async with aiohttp.ClientSession() as session:
+            async with session.get(WELCOME_BG_URL) as resp:
+                bg_bytes = await resp.read()
 
-        # Tempelkan Avatar ke Background
-        background.paste(avatar, (60, 145))
-        
-        # Font & Teks
-        font_title = Font.poppins(size=35, bold=True)
-        font_sub = Font.poppins(size=25, bold=False)
+        # Jalankan di thread terpisah supaya bot tidak nge-lag saat proses GIF
+        gif_buffer = await asyncio.to_thread(
+            buat_welcome_gif, bg_bytes, avatar_bytes,
+            member.name, member.guild.name, member.guild.member_count
+        )
 
-        background.text((250, 170), f"Welcome {member.name}", color="white", font=font_title)
-        background.text((250, 220), f"to {member.guild.name}", color="white", font=font_title)
-        background.text((250, 270), f"Member #{member.guild.member_count}", color="#a0a0a0", font=font_sub)
-
-        # Simpan ke buffer dan kirim
-        file = discord.File(fp=background.image_bytes, filename="welcome.gif")
+        file = discord.File(fp=gif_buffer, filename="welcome.gif")
         await channel.send(content=f"Selamat datang {member.mention}!", file=file)
 
     except Exception as e:
         print(f"Error saat membuat welcome card: {e}")
+        try:
+            await channel.send(f"Selamat datang {member.mention}!")
+        except Exception as e2:
+            print(f"Error kirim pesan welcome: {e2}")
+
+    # 2) Gift (tetap jalan walau card gagal)
+    try:
+        uid = str(member.id)
+        set_xp(uid, get_xp(uid) + GIFT_XP)
+        await channel.send(f"🎁 {member.mention} dapat gift **{GIFT_XP} XP** untuk member baru!")
+    except Exception as e:
+        print(f"Error saat memberi gift: {e}")
 
 @client.event
 async def on_message(message):
     global is_playing
 
     if message.author.bot:
+        return
+
+    # Abaikan DM (message.guild bernilai None)
+    if message.guild is None:
         return
 
     # ===== XP SYSTEM =====
@@ -241,7 +293,7 @@ async def on_message(message):
         music_queue.append(query)
 
         if "spotify.com" in query:
-            await message.channel.send(f"🟢 **Spotify Link** berhasil ditambahkan ke antrian!")
+            await message.channel.send("🟢 **Spotify Link** berhasil ditambahkan ke antrian!")
         else:
             await message.channel.send(f"🎵 **{query}** berhasil ditambahkan ke antrian!")
 
