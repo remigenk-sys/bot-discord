@@ -170,16 +170,15 @@ async def on_member_join(member):
         # Load avatar member
         avatar_image = await load_image_async(str(member.display_avatar.url))
         
-        # Direct GIF Background
+        # Load Direct GIF Background
         bg_url = "https://media.giphy.com/media/HSCZMUa1ao17h7l5mg/giphy.gif"
         bg_image = await load_image_async(bg_url)
 
         # Buat Card Welcome
         background = Editor(bg_image).resize((800, 450))
         
-        # PERBAIKAN: Menggunakan .circle() untuk mengubah avatar menjadi lingkaran
-        avatar = Editor(avatar_image).resize((160, 160))
-        avatar.circle()
+        # PERBAIKAN: .circleify() dipanggil sebelum .resize() agar tidak throw AttributeError
+        avatar = Editor(avatar_image).circleify().resize((160, 160))
 
         # Tempelkan Avatar ke Background
         background.paste(avatar, (60, 145))
@@ -252,7 +251,7 @@ async def on_message(message):
     elif message.content.startswith("vskip"):
         if message.guild.voice_client and message.guild.voice_client.is_playing():
             message.guild.voice_client.stop()
-            await message.channel.send("⏭️️ Lagu diskip!")
+            await message.channel.send("⏭ Lagu diskip!")
         else:
             await message.channel.send("❌ Tidak ada lagu yang sedang diputar!")
 
