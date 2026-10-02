@@ -169,8 +169,8 @@ def buat_welcome_gif(bg_bytes, avatar_bytes, nama, guild_name, jumlah):
     ImageDraw.Draw(mask).ellipse((0, 0, 160, 160), fill=255)
     avatar.putalpha(mask)
 
-    font_title = Font.poppins(variant="bold", size=35).font
-    font_sub = Font.poppins(variant="regular", size=25).font
+    font_title = Font.poppins(variant="bold", size=35)
+    font_sub = Font.poppins(variant="regular", size=25)
 
     bg = Image.open(io.BytesIO(bg_bytes))
 
