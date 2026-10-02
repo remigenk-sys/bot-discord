@@ -172,7 +172,7 @@ async def on_member_join(member):
         avatar_image = await load_image_async(str(member.display_avatar.url))
         
         # Load background (GANTI LINK INI dengan link direct GIF kamu)
-        bg_url = "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjEx.../giphy.gif"
+        bg_url = "https://giphy.com/gifs/love-heart-red-HSCZMUa1ao17h7l5mg"
         bg_image = await load_image_async(bg_url)
 
         # Buat Card Welcome
