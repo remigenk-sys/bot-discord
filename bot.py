@@ -161,7 +161,6 @@ async def on_ready():
 
 @client.event
 async def on_member_join(member):
-    # GANTI ANGKA DI BAWAH INI dengan ID Channel Welcome kamu di Discord!
     welcome_channel_id = 1472551428798152875 
     channel = client.get_channel(welcome_channel_id)
     if not channel:
@@ -171,13 +170,16 @@ async def on_member_join(member):
         # Load avatar member
         avatar_image = await load_image_async(str(member.display_avatar.url))
         
-        # Load background (GANTI LINK INI dengan link direct GIF kamu)
+        # Direct GIF Background
         bg_url = "https://media.giphy.com/media/HSCZMUa1ao17h7l5mg/giphy.gif"
         bg_image = await load_image_async(bg_url)
 
         # Buat Card Welcome
         background = Editor(bg_image).resize((800, 450))
-        avatar = Editor(avatar_image).resize((160, 160)).circleify()
+        
+        # PERBAIKAN: Menggunakan .circle() untuk mengubah avatar menjadi lingkaran
+        avatar = Editor(avatar_image).resize((160, 160))
+        avatar.circle()
 
         # Tempelkan Avatar ke Background
         background.paste(avatar, (60, 145))
@@ -250,7 +252,7 @@ async def on_message(message):
     elif message.content.startswith("vskip"):
         if message.guild.voice_client and message.guild.voice_client.is_playing():
             message.guild.voice_client.stop()
-            await message.channel.send("⏭️ Lagu diskip!")
+            await message.channel.send("⏭️️ Lagu diskip!")
         else:
             await message.channel.send("❌ Tidak ada lagu yang sedang diputar!")
 
@@ -289,5 +291,4 @@ Chat aktif = dapat XP otomatis!
 Level 5 = unlock channel secret!
         """)
 
-# PANGGUL RUN HANYA DI BAGIAN PALING BAWAH
 client.run(os.environ["TOKEN"])
